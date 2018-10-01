@@ -528,6 +528,38 @@ else
   AC_MSG_RESULT(yes)
 fi
 
+dnl Checking if we want FIPS warning
+
+AC_MSG_CHECKING(--enable-FIPS-warning)
+AC_ARG_ENABLE(fips-warning,
+              [  --enable-FIPS-warning Enable FIPS warning],
+              ,[enable_fips_warning="no"])
+
+if test "$enable_fips_warning" = "yes"; then
+  AC_MSG_RESULT(yes)
+  AC_DEFINE(HAVE_FIPS_WARNING)
+
+  dnl Setting path for system-fips file
+
+  AC_MSG_CHECKING(--with-system-fips argument)
+  AC_ARG_WITH(system-fips, [  --with-system-fips=PATH       Link to system-fips file (default: /etc/system-fips)],
+	system_fips_link="$withval",
+        system_fips_link="/etc/system-fips")
+  AC_MSG_RESULT($system_fips_link)
+  AC_DEFINE(SYSTEM_FIPS_LINK, $system_fips_link)
+
+  dnl Setting link to fips_enabled file
+
+  AC_MSG_CHECKING(--with-fips-enabled argument)
+  AC_ARG_WITH(fips-enabled, [  --with-fips-enabled=PATH       Link to fibs_enabled file (default: /proc/sys/crypto/fips_enabled)],
+	fips_enabled_link="$withval",
+        fips_enabled_link="/proc/sys/crypto/fips_enabled")
+  AC_MSG_RESULT($fips_enabled_link)
+  AC_DEFINE(FIPS_ENABLED_LINK, $fips_enabled_link)
+else
+  AC_MSG_RESULT(no)
+fi
+
 dnl Check for Lua feature.
 AC_MSG_CHECKING(--enable-luainterp argument)
 AC_ARG_ENABLE(luainterp,
