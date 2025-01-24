@@ -233,6 +233,12 @@ static int ruby_convert_to_vim_value(VALUE val, typval_T *rettv);
 #  undef rb_define_singleton_method
 # endif
 
+# define DLL_RBIMPL_ANYARGS_DISPATCH_rb_define_method_02(n) ((n == 2) ? (dll_rb_define_method_02) : (dll_rb_define_method_any))
+# define DLL_RBIMPL_ANYARGS_DISPATCH_rb_define_method_01(n) ((n == 1) ? (dll_rb_define_method_01) : (DLL_RBIMPL_ANYARGS_DISPATCH_rb_define_method_02(n)))
+# define DLL_RBIMPL_ANYARGS_DISPATCH_rb_define_method(n) ((n == 0) ? (dll_rb_define_method_00) : (DLL_RBIMPL_ANYARGS_DISPATCH_rb_define_method_01(n)))
+# define DLL_RBIMPL_ANYARGS_DISPATCH_rb_define_singleton_method(n) ((n == 0) ? (dll_rb_define_singleton_method_00) : (DLL_RBIMPL_ANYARGS_DISPATCH_rb_define_singleton_method_01(n)))
+# define DLL_RBIMPL_ANYARGS_DISPATCH_rb_define_singleton_method_01(n) ((n == 1) ? (dll_rb_define_singleton_method_01) : (dll_rb_define_singleton_method_any))
+
 # define rb_assoc_new			dll_rb_assoc_new
 # define rb_cObject			(*dll_rb_cObject)
 # define rb_class_new_instance		dll_rb_class_new_instance
@@ -255,10 +261,10 @@ static int ruby_convert_to_vim_value(VALUE val, typval_T *rettv);
 # define rb_define_class_under		dll_rb_define_class_under
 # define rb_define_const			dll_rb_define_const
 # define rb_define_global_function	dll_rb_define_global_function
-# define rb_define_method		dll_rb_define_method
+# define rb_define_method(buf, str, cb, arity)	DLL_RBIMPL_ANYARGS_DISPATCH_rb_define_method((arity))((buf), (str), (cb), (arity))
 # define rb_define_module		dll_rb_define_module
 # define rb_define_module_function	dll_rb_define_module_function
-# define rb_define_singleton_method	dll_rb_define_singleton_method
+# define rb_define_singleton_method(buf, str, cb, arity) DLL_RBIMPL_ANYARGS_DISPATCH_rb_define_singleton_method((arity))((buf), (str), (cb), (arity))
 # define rb_define_virtual_variable	dll_rb_define_virtual_variable
 # define rb_stdout			(*dll_rb_stdout)
 # define rb_stderr			(*dll_rb_stderr)
@@ -387,10 +393,15 @@ static void (*dll_rb_debug_rstring_null_ptr) (const char*);
 static VALUE (*dll_rb_define_class_under) (VALUE, const char*, VALUE);
 static void (*dll_rb_define_const) (VALUE,const char*,VALUE);
 static void (*dll_rb_define_global_function) (const char*,VALUE(*)(int, VALUE*, VALUE),int);
-static void (*dll_rb_define_method) (VALUE,const char*,VALUE(*)(VALUE, ...),int);
+static void (*dll_rb_define_method_00) (VALUE,const char*,VALUE(*)(VALUE),int);
+static void (*dll_rb_define_method_01) (VALUE,const char*,VALUE(*)(VALUE, VALUE),int);
+static void (*dll_rb_define_method_02) (VALUE,const char*,VALUE(*)(VALUE, VALUE, VALUE),int);
+static void (*dll_rb_define_method_any) (VALUE,const char*,VALUE(*)(...),int);
 static VALUE (*dll_rb_define_module) (const char*);
-static void (*dll_rb_define_module_function) (VALUE,const char*,VALUE(*)(VALUE, ...),int);
-static void (*dll_rb_define_singleton_method) (VALUE,const char*,VALUE(*)(VALUE, ...),int);
+static void (*dll_rb_define_module_function) (VALUE,const char*,VALUE(*)(VALUE, VALUE),int);
+static void (*dll_rb_define_singleton_method_00) (VALUE,const char*,VALUE(*)(VALUE),int);
+static void (*dll_rb_define_singleton_method_01) (VALUE,const char*,VALUE(*)(VALUE, VALUE),int);
+static void (*dll_rb_define_singleton_method_any) (VALUE,const char*,VALUE(*)(...),int);
 static void (*dll_rb_define_virtual_variable) (const char*,VALUE(*)(ID, VALUE*),void(*)());
 static VALUE *dll_rb_stdout;
 static VALUE *dll_rb_stderr;
@@ -646,10 +657,8 @@ static struct
     {"rb_define_class_under", (RUBY_PROC*)&dll_rb_define_class_under},
     {"rb_define_const", (RUBY_PROC*)&dll_rb_define_const},
     {"rb_define_global_function", (RUBY_PROC*)&dll_rb_define_global_function},
-    {"rb_define_method", (RUBY_PROC*)&dll_rb_define_method},
     {"rb_define_module", (RUBY_PROC*)&dll_rb_define_module},
     {"rb_define_module_function", (RUBY_PROC*)&dll_rb_define_module_function},
-    {"rb_define_singleton_method", (RUBY_PROC*)&dll_rb_define_singleton_method},
     {"rb_define_virtual_variable", (RUBY_PROC*)&dll_rb_define_virtual_variable},
     {"rb_stdout", (RUBY_PROC*)&dll_rb_stdout},
     {"rb_stderr", (RUBY_PROC*)&dll_rb_stderr},
@@ -1068,14 +1077,9 @@ error_print(int state)
 }
 
     static VALUE
-vim_message(VALUE self UNUSED, ...)
+vim_message(VALUE self UNUSED, VALUE str)
 {
     char *buff, *p;
-    va_list args;
-
-    va_start(args, self);
-    VALUE str = va_arg(args, VALUE);
-    va_end(args);
 
     str = rb_obj_as_string(str);
     if (RSTRING_LEN(str) > 0)
@@ -1095,28 +1099,16 @@ vim_message(VALUE self UNUSED, ...)
 }
 
     static VALUE
-vim_set_option(VALUE self UNUSED, ...)
+vim_set_option(VALUE self UNUSED, VALUE str)
 {
-    va_list args;
-
-    va_start(args, self);
-    VALUE str = va_arg(args, VALUE);
-    va_end(args);
-
     do_set((char_u *)StringValuePtr(str), 0);
     update_screen(UPD_NOT_VALID);
     return Qnil;
 }
 
     static VALUE
-vim_command(VALUE self UNUSED, ...)
+vim_command(VALUE self UNUSED, VALUE str)
 {
-    va_list args;
-
-    va_start(args, self);
-    VALUE str = va_arg(args, VALUE);
-    va_end(args);
-
     do_cmdline_cmd((char_u *)StringValuePtr(str));
     return Qnil;
 }
@@ -1196,16 +1188,11 @@ vim_to_ruby(typval_T *tv)
 #endif
 
     static VALUE
-vim_evaluate(VALUE self UNUSED, ...)
+vim_evaluate(VALUE self UNUSED, VALUE str)
 {
 #ifdef FEAT_EVAL
     typval_T    *tv;
     VALUE       result;
-    va_list args;
-
-    va_start(args, self);
-    VALUE str = va_arg(args, VALUE);
-    va_end(args);
 
     tv = eval_expr((char_u *)StringValuePtr(str), NULL);
     if (tv == NULL)
@@ -1281,16 +1268,11 @@ get_buf(VALUE obj)
 }
 
     static VALUE
-vim_blob(VALUE self UNUSED, ...)
+vim_blob(VALUE self UNUSED, VALUE str)
 {
     VALUE result = rb_str_new("0z", 2);
     char    buf[4];
     int	i;
-    va_list args;
-
-    va_start(args, self);
-    VALUE str = va_arg(args, VALUE);
-    va_end(args);
 
     for (i = 0; i < RSTRING_LEN(str); i++)
     {
@@ -1301,7 +1283,7 @@ vim_blob(VALUE self UNUSED, ...)
 }
 
     static VALUE
-buffer_s_current(VALUE self UNUSED, ...)
+buffer_s_current(VALUE self UNUSED)
 {
     return buffer_new(curbuf);
 }
@@ -1313,7 +1295,7 @@ buffer_s_current_getter(ID id UNUSED, VALUE *x UNUSED)
 }
 
     static VALUE
-buffer_s_count(VALUE self UNUSED, ...)
+buffer_s_count(VALUE self UNUSED)
 {
     buf_T *b;
     int n = 0;
@@ -1330,15 +1312,9 @@ buffer_s_count(VALUE self UNUSED, ...)
 }
 
     static VALUE
-buffer_s_aref(VALUE self UNUSED, ...)
+buffer_s_aref(VALUE self UNUSED, VALUE num)
 {
     buf_T *b;
-    va_list args;
-
-    va_start(args, self);
-    VALUE num = va_arg(args, VALUE);
-    va_end(args);
-
     int n = NUM2INT(num);
 
     FOR_ALL_BUFFERS(b)
@@ -1357,7 +1333,7 @@ buffer_s_aref(VALUE self UNUSED, ...)
 }
 
     static VALUE
-buffer_name(VALUE self, ...)
+buffer_name(VALUE self)
 {
     buf_T *buf = get_buf(self);
 
@@ -1365,7 +1341,7 @@ buffer_name(VALUE self, ...)
 }
 
     static VALUE
-buffer_number(VALUE self, ...)
+buffer_number(VALUE self)
 {
     buf_T *buf = get_buf(self);
 
@@ -1373,7 +1349,7 @@ buffer_number(VALUE self, ...)
 }
 
     static VALUE
-buffer_count(VALUE self, ...)
+buffer_count(VALUE self)
 {
     buf_T *buf = get_buf(self);
 
@@ -1389,14 +1365,9 @@ get_buffer_line(buf_T *buf, linenr_T n)
 }
 
     static VALUE
-buffer_aref(VALUE self, ...)
+buffer_aref(VALUE self, VALUE num)
 {
     buf_T *buf = get_buf(self);
-    va_list args;
-
-    va_start(args, self);
-    VALUE num = va_arg(args, VALUE);
-    va_end(args);
 
     if (buf != NULL)
 	return get_buffer_line(buf, (linenr_T)NUM2LONG(num));
@@ -1440,15 +1411,8 @@ set_buffer_line(buf_T *buf, linenr_T n, VALUE str)
 }
 
     static VALUE
-buffer_aset(VALUE self, ...)
+buffer_aset(VALUE self, VALUE num, VALUE str)
 {
-    va_list args;
-
-    va_start(args, self);
-    VALUE num = va_arg(args, VALUE);
-    VALUE str = va_arg(args, VALUE);
-    va_end(args);
-
     buf_T *buf = get_buf(self);
 
     if (buf != NULL)
@@ -1457,14 +1421,8 @@ buffer_aset(VALUE self, ...)
 }
 
     static VALUE
-buffer_delete(VALUE self, ...)
+buffer_delete(VALUE self, VALUE num)
 {
-    va_list args;
-
-    va_start(args, self);
-    VALUE num = va_arg(args, VALUE);
-    va_end(args);
-
     buf_T	*buf = get_buf(self);
     long	n = NUM2LONG(num);
     aco_save_T	aco;
@@ -1502,16 +1460,9 @@ buffer_delete(VALUE self, ...)
 }
 
     static VALUE
-buffer_append(VALUE self, ...)
+buffer_append(VALUE self, VALUE num, VALUE str)
 {
     buf_T	*buf = get_buf(self);
-    va_list args;
-
-    va_start(args, self);
-    VALUE num = va_arg(args, VALUE);
-    VALUE str = va_arg(args, VALUE);
-    va_end(args);
-
     char	*line = StringValuePtr(str);
     long	n = NUM2LONG(num);
     aco_save_T	aco;
@@ -1613,7 +1564,7 @@ get_win(VALUE obj)
 }
 
     static VALUE
-window_s_current(VALUE self UNUSED, ...)
+window_s_current(VALUE self UNUSED)
 {
     return window_new(curwin);
 }
@@ -1629,31 +1580,25 @@ window_s_current_getter(ID id UNUSED, VALUE *x UNUSED)
  *    SegPhault - 03/07/05
  */
     static VALUE
-line_s_current(VALUE self UNUSED, ...)
+line_s_current(VALUE self UNUSED)
 {
     return get_buffer_line(curbuf, curwin->w_cursor.lnum);
 }
 
     static VALUE
-set_current_line(VALUE self UNUSED, ...)
+set_current_line(VALUE self UNUSED, VALUE str)
 {
-    va_list args;
-
-    va_start(args, self);
-    VALUE str = va_arg(args, VALUE);
-    va_end(args);
-
     return set_buffer_line(curbuf, curwin->w_cursor.lnum, str);
 }
 
     static VALUE
-current_line_number(VALUE self UNUSED, ...)
+current_line_number(VALUE self UNUSED)
 {
     return INT2FIX((int)curwin->w_cursor.lnum);
 }
 
     static VALUE
-window_s_count(VALUE self UNUSED, ...)
+window_s_count(VALUE self UNUSED)
 {
     win_T	*w;
     int n = 0;
@@ -1664,15 +1609,9 @@ window_s_count(VALUE self UNUSED, ...)
 }
 
     static VALUE
-window_s_aref(VALUE self UNUSED, ...)
+window_s_aref(VALUE self UNUSED, VALUE num)
 {
     win_T *w;
-    va_list args;
-
-    va_start(args, self);
-    VALUE num = va_arg(args, VALUE);
-    va_end(args);
-
     int n = NUM2INT(num);
 
     for (w = firstwin; w != NULL; w = w->w_next, --n)
@@ -1682,7 +1621,7 @@ window_s_aref(VALUE self UNUSED, ...)
 }
 
     static VALUE
-window_buffer(VALUE self, ...)
+window_buffer(VALUE self)
 {
     win_T *win = get_win(self);
 
@@ -1690,7 +1629,7 @@ window_buffer(VALUE self, ...)
 }
 
     static VALUE
-window_height(VALUE self, ...)
+window_height(VALUE self)
 {
     win_T *win = get_win(self);
 
@@ -1698,15 +1637,10 @@ window_height(VALUE self, ...)
 }
 
     static VALUE
-window_set_height(VALUE self, ...)
+window_set_height(VALUE self, VALUE height)
 {
     win_T *win = get_win(self);
     win_T *savewin = curwin;
-    va_list args;
-
-    va_start(args, self);
-    VALUE height = va_arg(args, VALUE);
-    va_end(args);
 
     curwin = win;
     win_setheight(NUM2INT(height));
@@ -1715,21 +1649,16 @@ window_set_height(VALUE self, ...)
 }
 
     static VALUE
-window_width(VALUE self UNUSED, ...)
+window_width(VALUE self UNUSED)
 {
     return INT2NUM(get_win(self)->w_width);
 }
 
     static VALUE
-window_set_width(VALUE self UNUSED, ...)
+window_set_width(VALUE self UNUSED, VALUE width)
 {
     win_T *win = get_win(self);
     win_T *savewin = curwin;
-    va_list args;
-
-    va_start(args, self);
-    VALUE width = va_arg(args, VALUE);
-    va_end(args);
 
     curwin = win;
     win_setwidth(NUM2INT(width));
@@ -1738,7 +1667,7 @@ window_set_width(VALUE self UNUSED, ...)
 }
 
     static VALUE
-window_cursor(VALUE self, ...)
+window_cursor(VALUE self)
 {
     win_T *win = get_win(self);
 
@@ -1746,15 +1675,10 @@ window_cursor(VALUE self, ...)
 }
 
     static VALUE
-window_set_cursor(VALUE self, ...)
+window_set_cursor(VALUE self, VALUE pos)
 {
     VALUE lnum, col;
     win_T *win = get_win(self);
-    va_list args;
-
-    va_start(args, self);
-    VALUE pos = va_arg(args, VALUE);
-    va_end(args);
 
     Check_Type(pos, T_ARRAY);
     if (RARRAY_LEN(pos) != 2)
@@ -1770,7 +1694,7 @@ window_set_cursor(VALUE self, ...)
 }
 
     static VALUE
-f_nop(VALUE self UNUSED, ...)
+f_nop(VALUE self UNUSED)
 {
     return Qnil;
 }
