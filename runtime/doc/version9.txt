@@ -52585,6 +52585,8 @@ work in progress.
 Popups ~
 ------
 - Support for transparency, see |popup-opacity|.
+- 'previewpopup' supports the same values as 'completepopup' (except for
+  "align").
 
 Other ~
 -----
