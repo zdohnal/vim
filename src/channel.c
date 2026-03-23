@@ -1513,6 +1513,12 @@ channel_listen(
     int			val = 1;
     channel_T		*channel;
 
+    if (hostname == NULL || *hostname == NUL)
+    {
+	ch_error(NULL, "Hostname/address not defined.");
+	return NULL;
+    }
+
 #ifdef MSWIN
     channel_init_winsock();
 #endif
@@ -1521,12 +1527,6 @@ channel_listen(
     if (channel == NULL)
     {
 	ch_error(NULL, "Cannot allocate channel.");
-	return NULL;
-    }
-
-    if (hostname == NULL || *hostname == NUL)
-    {
-	ch_error(NULL, "Hostname/address not defined.");
 	return NULL;
     }
 
@@ -1571,6 +1571,15 @@ channel_listen(
     memcpy(&p, &host->h_addr_list[0], sizeof(p));
     memcpy((char *)&server.sin_addr, p, host->h_length);
 #endif
+
+    // Check if the resolved address is among loopback scope (subnet 127.0.0.0/8)
+    // Once there is IPv6 support, update this for IPv6.
+    if ((ntohl(server.sin_addr.s_addr) & 0xFF000000) != 0x7F000000)
+    {
+	ch_error(NULL, "Listening loopback-only.");
+	channel_free(channel);
+	return NULL;
+    }
 
     sd = socket(AF_INET, SOCK_STREAM, 0);
     if (sd == -1)
