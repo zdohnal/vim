@@ -2771,6 +2771,10 @@ endfunction
 
 func Test_listen()
     call ch_log('Test_listen()')
+    " try to listen non-loopback address should fail
+    let fail_server = ch_listen('8.8.8.8:12345', {'callback': function('s:test_listen_accept')})
+    call assert_equal(ch_status(fail_server), 'fail')
+
     let server = ch_listen('127.0.0.1:12345', {'callback': function('s:test_listen_accept')})
     if ch_status(server) == 'fail'
         call assert_report("Can't listen channel")
