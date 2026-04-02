@@ -1513,6 +1513,12 @@ channel_listen(
     int			val = 1;
     channel_T		*channel;
 
+    if (hostname == NULL || *hostname == NUL)
+    {
+	ch_error(NULL, "Hostname/address not defined.");
+	return NULL;
+    }
+
 #ifdef MSWIN
     channel_init_winsock();
 #endif
@@ -1529,47 +1535,51 @@ channel_listen(
     vim_memset((char *)&server, 0, sizeof(server));
     server.sin_family = AF_INET;
     server.sin_port = htons(port_in);
-    if (hostname != NULL && *hostname != NUL)
-    {
+
 #ifdef FEAT_IPV6
-	struct addrinfo	hints;
-	struct addrinfo	*res = NULL;
-	int		err;
+    struct addrinfo	hints;
+    struct addrinfo	*res = NULL;
+    int		err;
 
-	CLEAR_FIELD(hints);
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	if ((err = getaddrinfo(hostname, NULL, &hints, &res)) != 0)
-	{
-	    ch_error(channel, "in getaddrinfo() in channel_listen()");
-	    PERROR(_(e_gethostbyname_in_channel_listen));
-	    channel_free(channel);
-	    return NULL;
-	}
-	memcpy(&server.sin_addr,
-		&((struct sockaddr_in *)res->ai_addr)->sin_addr,
-		sizeof(server.sin_addr));
-	freeaddrinfo(res);
-#else
-	if ((host = gethostbyname(hostname)) == NULL)
-	{
-	    ch_error(channel, "in gethostbyname() in channel_listen()");
-	    PERROR(_(e_gethostbyname_in_channel_listen));
-	    channel_free(channel);
-	    return NULL;
-	}
-	{
-	    char		*p;
-
-	    // When using host->h_addr_list[0] directly ubsan warns for it to
-	    // not be aligned.  First copy the pointer to avoid that.
-	    memcpy(&p, &host->h_addr_list[0], sizeof(p));
-	    memcpy((char *)&server.sin_addr, p, host->h_length);
-	}
-#endif
+    CLEAR_FIELD(hints);
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    if ((err = getaddrinfo(hostname, NULL, &hints, &res)) != 0)
+    {
+	ch_error(channel, "in getaddrinfo() in channel_listen()");
+	PERROR(_(e_gethostbyname_in_channel_listen));
+	channel_free(channel);
+	return NULL;
     }
-    else
-	server.sin_addr.s_addr = htonl(INADDR_ANY);
+    memcpy(&server.sin_addr,
+	&((struct sockaddr_in *)res->ai_addr)->sin_addr,
+	sizeof(server.sin_addr));
+    freeaddrinfo(res);
+#else
+    if ((host = gethostbyname(hostname)) == NULL)
+    {
+	ch_error(channel, "in gethostbyname() in channel_listen()");
+	PERROR(_(e_gethostbyname_in_channel_listen));
+	channel_free(channel);
+	return NULL;
+    }
+
+    char		*p;
+
+    // When using host->h_addr_list[0] directly ubsan warns for it to
+    // not be aligned.  First copy the pointer to avoid that.
+    memcpy(&p, &host->h_addr_list[0], sizeof(p));
+    memcpy((char *)&server.sin_addr, p, host->h_length);
+#endif
+
+    // Check if the resolved address is among loopback scope (subnet 127.0.0.0/8)
+    // Once there is IPv6 support, update this for IPv6.
+    if ((ntohl(server.sin_addr.s_addr) & 0xFF000000) != 0x7F000000)
+    {
+	ch_error(NULL, "Listening loopback-only.");
+	channel_free(channel);
+	return NULL;
+    }
 
     sd = socket(AF_INET, SOCK_STREAM, 0);
     if (sd == -1)
